@@ -61,7 +61,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#17100b;col
  <div id="destello"></div>
 </div>
 
-<div id="ayuda">TOCÁ PARA DISPARAR · DESLIZÁ PARA APUNTAR</div>
+<div id="ayuda">DESLIZÁ PARA APUNTAR · TOCÁ PARA DISPARAR</div>
 
 <div id="inicio">
  <h1>🤠 PISTOLERO<br>CONTRA LOS MUERTOS</h1>
@@ -69,7 +69,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#17100b;col
  Defendete de las hordas de zombis en el viejo oeste.<br><br>
  💥 Escopeta de 8 cartuchos.<br>
  🎯 Apuntá con la mirilla del centro.<br>
- 👆 Tocá para disparar y escuchá los gritos de los zombis.<br>
+ 👆 Deslizá para apuntar y tocá para disparar (el tiro sale al soltar).<br>
  🧟 Zombis animados que se tambalean y caen al morir.<br>
  📡 Radar para localizarlos.
  </p>
@@ -95,6 +95,7 @@ let scene,camera,renderer,zombies=[];
 let vida=100,municion=8,muertos=0,oleada=1;
 let jugando=false,recargando=false,ultimoDisparo=0,yaw=0,pitch=0;
 let tocando=false,ultimoX=0,ultimoY=0;
+let inicioX=0,inicioY=0,deslizo=false;
 let movimiento={adelante:false,atras:false};
 
 let reloj=new THREE.Clock();
@@ -373,6 +374,8 @@ function recargar(){
 function apuntarZombie(){
  if(!camera||!zombies.length)return null;
 
+ camera.updateMatrixWorld(true);
+ raycaster.far=40;
  raycaster.setFromCamera(centro,camera);
 
  const vivos=zombies.filter(z=>z.userData.estado==="vivo");
@@ -439,41 +442,18 @@ function disparar(){
   orientarEscopeta();
  },120);
 
+ camera.updateMatrixWorld(true);
  raycaster.setFromCamera(centro,camera);
+ raycaster.far=40;
 
  const vivos=zombies.filter(z=>z.userData.estado==="vivo");
  const impactos=raycaster.intersectObjects(vivos,true);
  const alcanzados=new Set();
 
- for(const impacto of impactos){
-  let z=impacto.object;
-
-  while(z&&!z.userData.esZombie){
-   z=z.parent;
-  }
-
+ if(impactos.length){
+  let z=impactos[0].object;
+  while(z&&!z.userData.esZombie)z=z.parent;
   if(z)alcanzados.add(z);
- }
-
- const origen=camera.position.clone();
- const direccion=new THREE.Vector3();
-
- camera.getWorldDirection(direccion);
-
- for(const z of vivos){
-  const centroZ=z.position.clone();
-  centroZ.y+=1.3;
-
-  const hacia=centroZ.clone().sub(origen);
-  const distancia=hacia.length();
-
-  if(distancia>32)continue;
-
-  hacia.normalize();
-
-  if(direccion.dot(hacia)>0.975){
-   alcanzados.add(z);
-  }
  }
 
  if(alcanzados.size){
@@ -703,6 +683,7 @@ function iniciar(){
  pitch=0;
  recargando=false;
  tocando=false;
+ deslizo=false;
 
  movimiento={adelante:false,atras:false};
 
@@ -768,14 +749,15 @@ document.addEventListener("pointerdown",e=>{
  if(!jugando||e.target.closest("#inicio"))return;
 
  tocando=true;
- ultimoX=e.clientX;
- ultimoY=e.clientY;
-
- disparar();
+ deslizo=false;
+ ultimoX=inicioX=e.clientX;
+ ultimoY=inicioY=e.clientY;
 });
 
 document.addEventListener("pointermove",e=>{
  if(!tocando||!jugando)return;
+
+ if(Math.hypot(e.clientX-inicioX,e.clientY-inicioY)>12)deslizo=true;
 
  const dx=e.clientX-ultimoX;
  const dy=e.clientY-ultimoY;
@@ -792,8 +774,11 @@ document.addEventListener("pointermove",e=>{
  camera.rotation.x=pitch;
 });
 
-document.addEventListener("pointerup",()=>tocando=false);
-document.addEventListener("pointercancel",()=>tocando=false);
+document.addEventListener("pointerup",()=>{
+ if(tocando&&!deslizo)disparar();
+ tocando=false;
+});
+document.addEventListener("pointercancel",()=>{tocando=false;});
 
 window.addEventListener("keydown",e=>{
  if(e.code==="KeyW"||e.code==="ArrowUp"){
